@@ -1,0 +1,447 @@
+from flask import Flask, render_template_string, request, redirect, url_for, session
+
+# Create a Flask application
+app = Flask(__name__)
+app.secret_key = 'coffee_shop_secret_key'  # Needed for session
+
+# Coffee menu
+COFFEE_MENU = {
+    1: {"name": "Espresso", "price": 2.50},
+    2: {"name": "Cappuccino", "price": 3.50},
+    3: {"name": "Latte", "price": 3.75},
+    4: {"name": "Americano", "price": 3.00},
+    5: {"name": "Mocha", "price": 4.00},
+    6: {"name": "Flat White", "price": 3.50}
+}
+
+# Store orders in memory
+current_order = []
+
+@app.route('/')
+def home():
+    template = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Simple Coffee Shop</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            h1 { color: #4a4a4a; }
+            .menu-item { 
+                margin: 10px 0;
+                padding: 15px;
+                background-color: white;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .menu-item:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            }
+            .menu-item.selected {
+                background-color: #e8f5e9;
+                border: 2px solid #4CAF50;
+            }
+            .menu-item button {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px 15px;
+                border: none;
+                cursor: pointer;
+                border-radius: 5px;
+                transition: background-color 0.2s;
+            }
+            .menu-item button:hover {
+                background-color: #45a049;
+            }
+            .menu-item .price {
+                font-weight: bold;
+                color: #4a4a4a;
+            }
+            .button { 
+                background-color: #4CAF50; 
+                color: white; 
+                padding: 10px 20px; 
+                border: none; 
+                cursor: pointer;
+                border-radius: 5px;
+            }
+            .button:hover { background-color: #45a049; }
+            .order-summary { 
+                margin-top: 20px; 
+                padding: 20px; 
+                background-color: white;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .quantity-selector {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0;
+                margin-top: 20px;
+                padding: 30px 20px 30px 20px;
+                background-color: white;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .quantity-selector p {
+                margin: 0 0 20px 0;
+                font-size: 1.2em;
+                text-align: center;
+                width: 100%;
+            }
+            .quantity-controls {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                justify-content: center;
+                margin-bottom: 25px;
+                width: 100%;
+            }
+            .quantity-selector button {
+                background-color: #4CAF50;
+                color: white;
+                width: 40px;
+                height: 40px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 20px;
+                transition: background-color 0.2s;
+            }
+            .quantity-selector button:hover {
+                background-color: #45a049;
+            }
+            .quantity-selector input {
+                width: 80px;
+                height: 40px;
+                text-align: center;
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 1.1em;
+            }
+            .add-to-order-button {
+                margin-top: 10px;
+                padding: 15px 30px;
+                font-size: 1.1em;
+                width: 100%;
+                max-width: 220px;
+                display: block;
+                align-self: center;
+            }
+            .selected-coffee {
+                font-weight: bold;
+                color: #4CAF50;
+                font-size: 1.2em;
+            }
+            .order-form {
+                margin-top: 30px;
+            }
+            .order-form h2 {
+                margin-bottom: 20px;
+            }
+        </style>
+        <script>
+            function selectCoffee(coffeeId) {
+                // Remove selected class from all menu items
+                document.querySelectorAll('.menu-item').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                // Add selected class to clicked item
+                document.getElementById('coffee-' + coffeeId).classList.add('selected');
+                // Update hidden input
+                document.getElementById('selected-coffee').value = coffeeId;
+                // Show quantity selector
+                document.getElementById('quantity-selector').style.display = 'flex';
+                // Update selected coffee name
+                document.getElementById('selected-coffee-name').textContent = 
+                    document.getElementById('coffee-name-' + coffeeId).textContent;
+            }
+            
+            function updateQuantity(change) {
+                const input = document.getElementById('quantity');
+                const newValue = parseInt(input.value) + change;
+                if (newValue >= 1) {
+                    input.value = newValue;
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Welcome to Our Coffee Shop!</h1>
+        
+        <div class="menu">
+            <h2>Our Menu</h2>
+            {% for num, coffee in menu.items() %}
+            <div class="menu-item" id="coffee-{{ num }}" onclick="selectCoffee({{ num }})">
+                <span id="coffee-name-{{ num }}">{{ coffee.name }}</span>
+                <span class="price">£{{ "%.2f"|format(coffee.price) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="order-form">
+            <h2>Place Your Order</h2>
+            <form action="/order" method="post">
+                <input type="hidden" name="coffee" id="selected-coffee" value="">
+                
+                <div id="quantity-selector" style="display: none;">
+                    <p>Selected Coffee: <span id="selected-coffee-name" class="selected-coffee"></span></p>
+                    <div class="quantity-controls">
+                        <button type="button" onclick="updateQuantity(-1)">-</button>
+                        <input type="number" name="quantity" id="quantity" min="1" value="1" required readonly>
+                        <button type="button" onclick="updateQuantity(1)">+</button>
+                    </div>
+                    <button type="submit" class="button add-to-order-button">Add to Order</button>
+                </div>
+            </form>
+        </div>
+
+        {% if current_order %}
+        <div class="order-summary">
+            <h2>Your Order</h2>
+            {% for coffee_num, quantity in current_order %}
+                {% set coffee = menu[coffee_num] %}
+                <div class="menu-item">
+                    {{ coffee.name }} x {{ quantity }} = £{{ "%.2f"|format(coffee.price * quantity) }}
+                </div>
+            {% endfor %}
+            
+            <h3>Total: £{{ "%.2f"|format(total) }}</h3>
+            
+            <form action="/complete" method="post">
+                <button type="submit" class="button">Complete Order</button>
+            </form>
+        </div>
+        {% endif %}
+    </body>
+    </html>
+    '''
+    
+    # Calculate total if there are items in the order
+    total = 0
+    if current_order:
+        for coffee_num, quantity in current_order:
+            total += COFFEE_MENU[coffee_num]["price"] * quantity
+    
+    return render_template_string(template, 
+                                menu=COFFEE_MENU,
+                                current_order=current_order,
+                                total=total)
+
+@app.route('/order', methods=['POST'])
+def place_order():
+    try:
+        coffee_choice = int(request.form['coffee'])
+        quantity = int(request.form['quantity'])
+        
+        if coffee_choice in COFFEE_MENU and quantity > 0:
+            current_order.append((coffee_choice, quantity))
+    except ValueError:
+        pass  # If there's an error, just ignore it and go back to home
+    
+    return redirect(url_for('home'))
+
+@app.route('/complete', methods=['POST'])
+def complete_order():
+    global current_order
+    if current_order:
+        # Calculate the total before clearing the order
+        total = 0
+        for coffee_num, quantity in current_order:
+            total += COFFEE_MENU[coffee_num]["price"] * quantity
+        
+        # Store the total temporarily
+        order_total = total
+        
+        # Clear the order
+        current_order = []
+        
+        # Thank you page with the total
+        thank_you_template = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Thank You - Coffee Shop</title>
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    max-width: 800px; 
+                    margin: 0 auto; 
+                    padding: 20px;
+                    background-color: #f5f5f5;
+                    text-align: center;
+                }
+                .thank-you-container {
+                    background-color: white;
+                    padding: 40px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    margin-top: 50px;
+                }
+                h1 { color: #4a4a4a; }
+                .total {
+                    font-size: 24px;
+                    color: #4CAF50;
+                    margin: 20px 0;
+                }
+                .button {
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 10px 20px;
+                    border: none;
+                    cursor: pointer;
+                    border-radius: 5px;
+                    text-decoration: none;
+                    display: inline-block;
+                    margin-top: 20px;
+                }
+                .button:hover { background-color: #45a049; }
+            </style>
+        </head>
+        <body>
+            <div class="thank-you-container">
+                <h1>Thank You for Your Order! ☕</h1>
+                <p>Your coffee is being prepared with care.</p>
+                <div class="total">
+                    Total Amount: £{{ "%.2f"|format(total) }}
+                </div>
+                <p>Please proceed to the counter to collect your order.</p>
+                <a href="/" class="button">Place Another Order</a>
+            </div>
+        </body>
+        </html>
+        '''
+        return render_template_string(thank_you_template, total=order_total)
+    return redirect(url_for('home'))
+
+@app.route('/thank-you')
+def thank_you():
+    # Get order details from session
+    order_details = session.get('order_details', [])
+    total = session.get('total', 0)
+    
+    # Clear session data
+    session.pop('order_details', None)
+    session.pop('total', None)
+    
+    template = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Thank You - Coffee Shop</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .thank-you {
+                text-align: center;
+                padding: 40px;
+                background-color: #e8f5e9;
+                border-radius: 10px;
+                margin: 20px 0;
+            }
+            .thank-you h2 {
+                color: #2e7d32;
+            }
+            .order-details {
+                background-color: white;
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px 0;
+            }
+            .order-item {
+                margin: 10px 0;
+                padding: 10px;
+                background-color: #f9f9f9;
+                border-radius: 5px;
+            }
+            .total {
+                font-size: 1.2em;
+                font-weight: bold;
+                margin-top: 20px;
+                padding-top: 20px;
+                border-top: 2px solid #e0e0e0;
+            }
+            .button {
+                background-color: #2196F3;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                cursor: pointer;
+                border-radius: 5px;
+                text-decoration: none;
+                display: inline-block;
+                margin-top: 20px;
+            }
+            .button:hover {
+                background-color: #1976D2;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="thank-you">
+            <h2>Thank You for Your Order! ☕</h2>
+            <p>Your coffee will be ready soon!</p>
+        </div>
+        
+        <div class="order-details">
+            <h3>Order Summary</h3>
+            {% for item in order_details %}
+            <div class="order-item">
+                {{ item.name }} x {{ item.quantity }} = £{{ "%.2f"|format(item.item_total) }}
+            </div>
+            {% endfor %}
+            
+            <div class="total">
+                Total Amount: £{{ "%.2f"|format(total) }}
+            </div>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="/" class="button">Place Another Order</a>
+        </div>
+    </body>
+    </html>
+    '''
+    
+    return render_template_string(template, 
+                                order_details=order_details,
+                                total=total)
+
+def run_coffee_shop():
+    """Run the coffee shop web app"""
+    print("\n" + "="*50)
+    print("Starting the Coffee Shop Web App...")
+    print("="*50)
+    print("\nSTEP 1: Wait until you see 'Running on http://127.0.0.1:8080'")
+    print("STEP 2: Open your web browser (Chrome, Firefox, or Edge)")
+    print("STEP 3: Copy and paste this address into your browser:")
+    print("\n        http://127.0.0.1:8080")
+    print("\n        or try: http://localhost:8080")
+    print("\nTo stop the server, press Ctrl+C in this window")
+    print("="*50 + "\n")
+    
+    # Run the Flask app on port 8080
+    app.run(host='127.0.0.1', port=8080, debug=False, use_reloader=False)
+
+# If running in Jupyter, you can just call run_coffee_shop()
+# If running as a script, use this:
+if __name__ == '__main__':
+    run_coffee_shop() 
