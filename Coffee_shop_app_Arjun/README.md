@@ -6,7 +6,7 @@ The functions of this app is a home page, place order, complete order, thank you
 
 ##This also includes HTML and this is the main functions:
 
-![alt text](Referenecs/image.png)
+![alt text]("Referenecs/image.png")
 This is used to structure and style my different elements in my app. So it has all the spacing, colour and size etc.
  
 ![alt text](image-2.png)
