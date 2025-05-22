@@ -7,6 +7,7 @@ The functions of this app is a home page, place order, complete order, thank you
 ##This also includes HTML and this is the main functions:
 
 ![alt text](References/image.png)
+
 This is used to structure and style my different elements in my app. So it has all the spacing, colour and size etc.
  
 ![alt text](References/image-2.png)
@@ -18,6 +19,9 @@ Dynamic Content, this is used to dynamically change elements such as total amoun
 Forms are used for users to order coffee so they can interact with the webpage.
 
 ##Screenshots
+
+
+
 ![alt text](References/image-4.png)
 
 ![alt text](References/image-5.png)
